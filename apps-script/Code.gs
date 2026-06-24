@@ -298,6 +298,71 @@ function runWatcher() {
 
   // Confirm application sends in the same run.
   try { processSentConfirmations_(cfg, userId, apps); } catch (e) { Logger.log('Sent-confirm error: ' + e); }
+
+  // Alert on tasks that just became due (crossed their due_at in the last 15 min).
+  try { notifyDueTasks_(cfg, userId, appName_(apps)); } catch (e) { Logger.log('Due-task alert error: ' + e); }
+}
+
+function appName_(apps) {
+  var m = {};
+  apps.forEach(function (a) { m[a.id] = a.company_name; });
+  return m;
+}
+
+// Fires an email for each task whose due_at fell within the last 15 minutes
+// and hasn't been notified yet. Uses a `due_notified` flag stored in Script
+// Properties (JSON map of task_id -> true) to avoid repeat alerts.
+function notifyDueTasks_(cfg, userId, appNames) {
+  var now = new Date();
+  var windowStart = new Date(now.getTime() - 16 * 60 * 1000); // 16 min buffer
+
+  var tasks = sbSelect_(
+    cfg,
+    'tasks',
+    'select=id,title,due_at,application_id,type' +
+      '&status=in.(open,snoozed)' +
+      '&due_at=gte.' + windowStart.toISOString() +
+      '&due_at=lte.' + now.toISOString()
+  );
+
+  if (!tasks.length) return;
+
+  // Load notified set from Script Properties to dedupe across runs.
+  var props = PropertiesService.getScriptProperties();
+  var notifiedRaw = props.getProperty('DUE_NOTIFIED') || '{}';
+  var notified;
+  try { notified = JSON.parse(notifiedRaw); } catch (e) { notified = {}; }
+
+  var sent = 0;
+  tasks.forEach(function (t) {
+    if (notified[t.id]) return; // already alerted
+    var company = appNames[t.application_id] || 'Unknown company';
+    var subject = '[Job CRM] Task due now: ' + t.title + ' — ' + company;
+    var body = [
+      'A task just came due:',
+      '',
+      '  Task:    ' + t.title,
+      '  Company: ' + company,
+      '  Due:     ' + fmt_(t.due_at),
+      '',
+      'Open the app to complete or snooze it.',
+    ].join('\n');
+    notify_(cfg, subject, body);
+    notified[t.id] = true;
+    sent++;
+  });
+
+  if (sent > 0) {
+    // Prune old keys (keep last 500) so the property doesn't grow unbounded.
+    var keys = Object.keys(notified);
+    if (keys.length > 500) {
+      var pruned = {};
+      keys.slice(keys.length - 500).forEach(function (k) { pruned[k] = true; });
+      notified = pruned;
+    }
+    props.setProperty('DUE_NOTIFIED', JSON.stringify(notified));
+    Logger.log('Sent ' + sent + ' due-task alert(s).');
+  }
 }
 
 /**
