@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser, badRequest, serverError } from "@/lib/api";
-import { pickWritable } from "../route";
+import { pickWritable } from "@/lib/applications";
 
 // PATCH /api/applications/:id — partial update.
 export async function PATCH(

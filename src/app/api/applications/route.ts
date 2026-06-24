@@ -1,33 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser, badRequest, serverError } from "@/lib/api";
-
-// Whitelist of columns a client may set/update on an application.
-const WRITABLE = [
-  "company_name",
-  "role_title",
-  "jd_url",
-  "jd_summary",
-  "source",
-  "date_applied",
-  "stage",
-  "email_domain",
-  "salary_target",
-  "links",
-  "notes",
-  "outreach_notes",
-  "custom_fields",
-  "follow_up_due",
-  "last_contact_at",
-  "sent_confirmed",
-] as const;
-
-export function pickWritable(body: Record<string, unknown>) {
-  const out: Record<string, unknown> = {};
-  for (const k of WRITABLE) {
-    if (k in body) out[k] = body[k];
-  }
-  return out;
-}
+import { pickWritable } from "@/lib/applications";
 
 // POST /api/applications — create a new application.
 export async function POST(request: Request) {
