@@ -27,6 +27,8 @@ function pickAppFields(fields: Record<string, unknown> | undefined) {
   const out: Record<string, unknown> = {};
   if (!fields) return out;
   for (const k of APP_FIELDS) if (k in fields) out[k] = fields[k];
+  // Normalize stage to lowercase so model casing ("Applied") doesn't break the enum.
+  if (typeof out.stage === "string") out.stage = out.stage.toLowerCase();
   return out;
 }
 
