@@ -10,12 +10,41 @@ the reminders have something to act on — **tasks-with-deadlines are the heartb
 
 ---
 
+## Why this exists
+
+Job searching fails on **follow-through**, not on tracking. The applications are easy to
+remember for about four days; what actually decides outcomes is whether you sent the
+LinkedIn note on day two, whether you noticed the recruiter replied, and whether you
+circled back on the one that went quiet three weeks ago. A spreadsheet records all of that
+faithfully and never once makes you do it.
+
+So this is built the other way around. **Tasks-with-deadlines are the heartbeat** and the
+CRM exists to give those tasks something to point at. Creating an application
+automatically creates the 48-hour outreach task. A Gmail watcher running on Google's infra
+every 15 minutes classifies replies and updates stage without you touching the board. An
+8am digest tells you what's overdue. The app nags; you don't have to remember to open it.
+
+Three design decisions are the interesting part:
+
+- **Confirm-before-apply.** You talk to it — "applied to Acme for the platform role, follow
+  up Thursday" — and the model returns a *structured diff*, never a write. You see the
+  parsed company, role, and dates and click Apply. Speech recognition mishears company
+  names constantly; a voice interface that silently mutates your data is worse than no
+  voice interface.
+- **It runs when the tab is closed.** A web page can't watch Gmail or fire at 8am, so the
+  always-on half is Google Apps Script, talking to Supabase directly over REST. It doesn't
+  depend on the Vercel app being up at all.
+- **It refuses to draft your outreach.** See below — the spec asked for it and the locked
+  behavior forbade it. The locked behavior won.
+
+---
+
 ## How it's split across three runtimes (and why)
 
 | Runtime | Does | Why it has to be separate |
 | --- | --- | --- |
 | **Next.js on Vercel** | UI, voice capture, and server-side `/api` routes that hold the Anthropic key | The Anthropic key can't live in the browser |
-| **Supabase** (Postgres + Auth + RLS) | Database + magic-link auth; syncs across machines | localStorage doesn't sync across computers |
+| **Supabase** (Postgres + Auth + RLS) | Database + email/password auth; syncs across machines | localStorage doesn't sync across computers |
 | **Google Apps Script** (bound to your Gmail) | Always-on Gmail watcher + notifier + daily digest, on time-driven triggers | A web page can't run when closed or read Gmail; Apps Script runs *as you* with native Gmail + scheduling |
 
 The Apps Script half is **fully self-contained** — it talks to Supabase directly
@@ -33,7 +62,7 @@ job-search-crm/
 ├─ src/
 │  ├─ app/
 │  │  ├─ page.tsx         # the board (server component)
-│  │  ├─ login/           # magic-link login + server action
+│  │  ├─ login/           # email + password login + server action
 │  │  ├─ auth/            # callback (code exchange) + signout
 │  │  └─ api/             # parse-command, apply-command, summarize-jd,
 │  │     │                #   applications, tasks, contacts, field-defs
@@ -84,9 +113,10 @@ Everything below marked **[manual]** is something this codebase cannot do for yo
    - **Site URL:** `http://localhost:3000` for dev (change to your Vercel URL in prod).
    - **Redirect URLs:** add `http://localhost:3000/auth/callback` and, later,
      `https://YOUR-APP.vercel.app/auth/callback`.
-4. Email auth (magic link) is on by default. For real magic-link emails in
-   production, configure SMTP under Authentication ▸ Emails (optional for local
-   testing — the dev inbox / logs show the link).
+4. Authentication ▸ Providers ▸ **Email** — leave email auth on and turn
+   *Confirm email* off (or confirm once) for a single-user app. Create your user
+   under Authentication ▸ Users; the app signs in with **email + password**
+   (`signInWithPassword`), not a magic link.
 
 ### 2. Run the web app locally
 
@@ -110,7 +140,7 @@ ANTHROPIC_MODEL_FAST=claude-haiku-4-5
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-Sign in with the magic link, then (optional) run
+Sign in with your email + password, then (optional) run
 [`supabase/seed.sql`](supabase/seed.sql) to get one test application.
 
 ### 3. Deploy to Vercel **[manual]**
